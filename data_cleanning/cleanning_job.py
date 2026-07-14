@@ -7,13 +7,6 @@ class treatments:
         current_dir = Path(__file__).resolve().parent
         file_path = current_dir / "Dados_trash.csv"
         return pd.read_csv(file_path, sep=";")  # se o CSV usa ; como separador
-    
-    @staticmethod
-    def treating_columns_names(df):
-        print("antes:", list(df.columns))
-        df.columns = [c.lower() if isinstance(c, str) else c for c in df.columns]
-        print("depois:", list(df.columns))
-        return df
 
     @staticmethod
     def treating_spaces(df):
@@ -40,7 +33,8 @@ class treatments:
     
     @staticmethod
     def normalizing_age(df: pd.DataFrame):
-        pass
+        if "AGE" in df.columns:
+            print("true")
 
         # if "AGE" in df.columns:
         #     print("column dtype:", df["AGE"].dtype)
@@ -59,9 +53,11 @@ class treatments:
 
 
 df = treatments.reading_file()
-treating_spaces = treatments.treating_spaces(df)
-normalizing_gender = treatments.normalizing_gender(treating_spaces)
-treating_columns_names = treatments.treating_columns_names(normalizing_gender)
+result = treatments.treating_spaces(df)
+print(result)
+# result_v2 = treatments.normalizing_gender(result)
+# print(result_v2.columns)
+# age_treatment = treatments.normalizing_age(result_v2)
+# print(age_treatment)
 
-print(treating_columns_names)
 
