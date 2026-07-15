@@ -1,0 +1,11 @@
+Why use the isinstance() function?
+- for what i understand, the isinstance() function is used to validate if a specific variable is one specific kind of object. for example:
+imagine that we have a variable called "a" and we assign the value 2 to a. 2 is a integer. if we use a function intended for string values
+on a, it will raise an error. so, in this case we know the value of "a" but lets imagine that we're working  with one specific variable whose value we don't know. In this cases we 
+can use the isinstance() function. it will validate if "a" is a specific kind of object. take a look in this example:
+def validator(a):
+    if isinstance(a, str):
+        return a.upper()
+    else:
+        print("'a' is not a string")
+in this case we are saying: hey, if a is a string, put a in upper case, otherwise print that a is not a string. 
