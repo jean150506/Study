@@ -9,3 +9,15 @@ def validator(a):
     else:
         print("'a' is not a string")
 in this case we are saying: hey, if a is a string, put a in upper case, otherwise print that a is not a string. 
+
+Explicação da linha de código:
+df.columns = [c.upper() if isinstance(c,str) else c for c in df.columns]
+- para as colunas do dataframe, aplique c em letra maiúscula caso c seja uma str, caso contrário, mantenha c para cada uma das colunas no dataframe 
+
+Explicação de linha de código:
+df["gender_ID"] = df["gender_ID"].astype("string").str.replace("femaleale ", "female")
+A função ".astype("string")" converte os valores da coluna "gender_ID" para o tipo string.
+Depois disso, usamos ".str" para aplicar operações de texto, como ".replace()".
+Ou seja, ".astype()" muda o tipo do dado, e ".str" permite manipular o conteúdo desse texto.
+
+BMI = Body Mass Index 
