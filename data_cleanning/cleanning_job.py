@@ -39,6 +39,24 @@ class treatments:
         df["BMI"] = df["BMI"].astype("string").str.replace("UNKNOWN","0")
         df["BMI"] = df["BMI"].astype("float").__round__(2)
         return df
+    @staticmethod 
+    def treating_IS_SMOKER(df: pd.DataFrame):
+        df["IS_SMOKER"] = df["IS_SMOKER"].astype("string").str.upper()
+        df["IS_SMOKER"] = df["IS_SMOKER"].astype("string").str.strip()
+        df["IS_SMOKER"] = df["IS_SMOKER"].astype("string").str.replace("Y","YES")
+        df["IS_SMOKER"] = df["IS_SMOKER"].astype("string").str.replace("N","NO")
+        return df
+    @staticmethod
+    def treating_region_name(df:pd.DataFrame):
+        df["REGION_NAME"] = df["REGION_NAME"].astype("string").str.strip()
+        return df 
+    @staticmethod
+    def treating_total_charges(df:pd.DataFrame):
+        df["TOTAL_CHARGES"] = df["TOTAL_CHARGES"].astype("string").str.strip()
+        df["TOTAL_CHARGES"] = df["TOTAL_CHARGES"].astype("string").str.replace("$ ","")
+        df["TOTAL_CHARGES"] = df["TOTAL_CHARGES"].astype("float").__round__(2)
+        df["TOTAL_CHARGES"] = df["TOTAL_CHARGES"].fillna(0)
+        return df
     
 
 
@@ -52,6 +70,9 @@ df = treatments.treating_uppercase(df)
 df = treatments.normalizing_gender(df)
 df = treatments.normalizing_age(df)
 df = treatments.treating_bmi(df)
+df = treatments.treating_IS_SMOKER(df)
+df = treatments.treating_region_name(df)
+df = treatments.treating_total_charges(df)
 print(df)
 
 
