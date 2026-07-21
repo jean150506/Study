@@ -8,5 +8,5 @@ module "conditional to craw" {
     name = "the name of the trigger "
     description = " the description of the trigger"
     type = " type of the trigger" / example: CONDITIONAL 
-    
+    type = 
 }
