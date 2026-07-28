@@ -139,3 +139,146 @@ def anonymize_with_comprehend(text: str):
             #   - Verificamos se está no pii_map (se deve ser mascarada)
             #   - Verificamos se Score >= 0.85 (alta confiança)
             #   - Substituímos tudo entre BeginOffset e EndOffset pelo rótulo (ex: [NOME])
+    return text
+
+def anonymize( text: str):
+    text = anonymize_with_regex(text)
+    text = anonymize_with_comprehend(text)
+    # Aqui é onde de fato aplicamos as anonimizações definidas nas funções ao texto
+    return text
+
+SUMMARY_PROMPT_TEMPLATE = """
+GERE UM RESUMO DO TEXTO QUE VOCÊ RECEBER RESPEITANDO A SEGUINTE ESTRUTURA:
+**TEMA PRINCIPAL DO TEXTO **: [TEMA DO TEXTO]
+**RESUMO**: [RESUMO BREVE SOBRE O QUE O TEXTO TRATA]
+**PROBLEMA IDENTIFICADO**:[PROBLEMA IDENTIFICADO NO TEXTO CASO TENHA]
+**SOLUÇÃO APLICADA**: [COMO A QUESTÃO APRESENTADA NO TEXTO FOI RESOLVIDA]
+
+TEXTO: 
+{text}
+"""
+
+def extract_conversation(record):
+    transcript =  record.get("transcript", [])
+    # aqui recebemos um objeto do tipo dicionário, e desse dict procuramos a key "transcript". Se ela existir, 
+    # salvamos o resultado dele à variável "trasncript" que seria uma lista, caso contrário retornamos uma lista vazia.
+    if not transcript:
+        return None
+    lines = []
+    for msg in transcript:
+        role = msg.get("ParticipantRole", "UNKNOWN")
+        content = msg.get("Content", "")
+        # aqui, dentro da lista "transcript" temos dicionários que possuem os campos/ keys ParticipantRole e Content.
+        # Salvamos esses campos nas variáveis
+        if content.strip():
+            # aqui, de maneira implícita, estamos declarando que, caso depois de tirar o espaço do inicio e do fim
+            # content ainda seja True, ou seja, após tirar os espaços, se content ainda existir...
+            lines.append(f"[{role}]: [{content}]")
+            # adicionamos à lista "lines" a linha de Participante: Content
+    return "\n".join(lines) if lines else None
+    # aqui unimos todos os registros em lines separando por quebra de linha 
+def invoke_agent(conversation_text):
+    session_id = str(uuid.uuid4())
+    # aqui criamos um identificador único para a sessão e convertemos para uma string 
+    prompt = SUMMARY_PROMPT_TEMPLATE.format(conversation_text = conversation_text)
+    # declaramos aqui que o agente que vamos invocar deve usar como prompt as infromações que definimos em
+    # SUMMARY_PROMPT_TEMPLATE 
+    try:
+        response = bedrock_agent_runtime.invoke_agent(
+            agent_id = AGENT_ID,
+            # definimos o id do agente que deve ser invocado 
+            agentAliasId = AGENT_ALIAS_ID,
+            # definimos a identificação da versão do agente que deve ser invocado 
+            sessionId=session_id,
+            # o id unico que criamos para a sessão
+            inputText=prompt
+            # o prompt do agente que definimos acima 
+        )
+        completion = ""
+        for event in response["completion"]:
+            if "chunk" in event:
+                # com chunk sendo um fragmento de resposta
+                chunk_data = event["chunk"].get("bytes", b"")
+                # chunk_data sendo bytes desse fragmento
+                completion += chunk_data.decode("utf-8")
+                # agregamos à completion todos os fragmentos da resposta para gerar uma resposta completa.
+        return completion 
+    except Exception as e :
+        print(f"[ERROR]: {e}")
+        # caso tenhamos um erro na tentativa de invocar o agente, retornamos o erro que tivemos 
+def parse_summary_response(response_text: str):
+    fields ={
+        "titulo":"",
+        "resumo":"",
+        "problema_identificado":"",
+        "solucao_aplicada":""
+        # aqui criamos um dicionário vazio com keys a serem preenchidas.
+
+    }
+    patterns = {
+    "titulo": r"\*?\*?T[ií]tulo\s*:\s*\*?\s*(.*?)(?=\n\*?\s*\|\s*$)",
+    "resumo": r"\*?\*?Resumo\s*:\s*\*?\s*(.*?)(?=\n\*?\s*\|\s*$)",
+    "problema_identificado": r"\*?\*?Problema identificado\s*:\s*\*?\s*(.*?)(?=\n\*?\s*\|\s*$)",
+    "solucao_aplicada": r"\*?\*?Solu[cç][aã]o aplicada\s*:\s*\*?\s*(.*?)(?=\n\*?\s*\|\s*$|\Z)"
+    # aqui definimos a expressão regular para encontrar esses campos no meio do texto
+
+    }
+
+    for field , pattern in patterns.items():
+        match = re.search(pattern, response_text, re.IGNORECASE | re.DOTALL )
+        # aqui, para cada campo, procuramos o padrão que estabelecemos dentro de um texto (response_text) ignorando
+        # tamanho das letras e pondo o ponto final em cada uma das quebras de linha 
+        #  se encontrarmos alguma correspondência com o padrão que definimos....
+        if match:
+            fields[field] = match.group(1).strip()
+            # pegamos o primeiro grupo que pegamos o padrão e trimaos o espaço no inicio e final.
+            # exemplo: **titulo**: meu estudo. O re.search encontra esse trecho e o group(1) retorna "meu estudo".
+            # se mudassemos, por exemplo, para "group(0)" teríamos como retorno "**titulo**: meu estudo /n"
+        
+    return fields 
+
+def summary_already_exists(source_bucket, dest_key):
+    try:
+        s3_client.head_object(Bucket=source_bucket, Key=dest_key)
+        return True
+    except s3_client.Exceptions.ClientError:
+        return False
+def lambda_handler(event, context):
+    if "Records" in event:
+        source_bucket = event["Records"][0]["s3"]["bucket"]["name"]
+        source_key = urllib.parse.unquote_plus(
+            event["detail"]["object"]["key"], encoding="utf-8"
+        )
+    else:
+        return {"statusCode": 400, "body":"unknown. Error "}
+    if not source_key.endswith(".parquet"):
+        return "not a paquet file, skipping"
+    if source_key.startswith(DESTINATION_PREFIX):
+        return "file already exists"
+    
+    records = converter(source_bucket, source_key)
+    if not records:
+        return "No records to proccess"
+    conversations = records if isinstance(records, list) else [records]
+
+    year_match = re.search(r"year=(\d{4})", source_key)
+    month_match = re.search(r"month=(\d{2})", source_key)
+    day_match = re.search(r"day=(\d{2})", source_key)
+
+    if year_match and month_match and day_match:
+        year = year_match.group(1) 
+        # year_match = "year=xxxx"
+        # year_match.group(1) = "xxxx"
+        # year = year_match(1) = "xxxx"
+        month = month_match.group(1)
+        day = day_match.group(1)
+    else:
+        now = datetime.now(timezone.utc)
+        year = str(now.year)
+        month = f"{now.month:02d}"
+        day = f"{now.day:02d}"
+
+    dest_key_default = (
+        f"{DESTINATION_PREFIX}/y={year}/m={month}/d={day}/"
+        f"summaries_{year}-{month}-{day}"
+    )
