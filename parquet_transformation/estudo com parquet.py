@@ -20,18 +20,37 @@ def creating_parquet():
     }
 
     df = pd.DataFrame(dados)
-    df.to_parquet("Data_frame.parquet",index=False)
     return df
 
 @dataclass
 class Config:
-    raw_path: str = str(pathlib.Path.cwd() / "raw")
-    context_path: str = str(pathlib.Path.cwd() / "context")
+    raw_path: str = str(pathlib.Path.cwd().parent / "raw")
+    context_path: str = str(pathlib.Path.cwd().parent / "context")
     
 @staticmethod
 def create_directory(raw_path, context_path):
-    os.mkdir(raw_path)
-    os.mkdir(context_path)
+    try:
+        os.mkdir(raw_path)
+    except FileExistsError:
+        os.rmdir(raw_path)
+        os.mkdir(raw_path)
+    try:
+        os.mkdir(context_path)
+    except FileExistsError:
+        os.rmdir(context_path)
+        os.mkdir(context_path)
+
+
+
+@staticmethod
+def loading_raw(raw_path, df):
+    df = creating_parquet()
+    df.to_parquet(raw_path, index=False)
+    return df
 
 if __name__=="__main__":
     create_directory(Config.raw_path, Config.context_path)
+    df = creating_parquet()
+    loading_raw(Config.raw_path, df)
+    
+    
