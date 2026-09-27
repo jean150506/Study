@@ -5,8 +5,8 @@ import json
 from argparse import ArgumentParser # lib para passar argumentos extras do terminal 
 from dataclasses import dataclass 
 import logging
-import sys 
-
+import sys  
+ 
 @dataclass # usamos esse decorador quando queremos indicar que a classe que será criada 
 # é basicamente para guardar variáveis
 class Args:
