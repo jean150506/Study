@@ -39,3 +39,40 @@ class Args:
         return cls(**vars(args))
         # Converte o Namespace args em um dicionário e usa seus valores
         # para criar e retornar uma instância da classe Args.
+@dataclass
+class Config:
+    date: date
+    source_path: str = ("caminho s3 do recurso"
+    )
+    raw_target_path: str = ("caminho s3 onde vão ser descarregados os dados ")
+
+    
+    def __post_init__(self) -> None:
+        # Este método é chamado automaticamente após Config ser inicializado.
+        # Nesse momento, self.date já contém a data recebida na criação do objeto.
+        # Usamos essa data para montar self.dt com o ano formatado como texto.
+    
+        self.dt = {
+            "year": self.date.strftime("%Y"),
+            "month": self.date.strftime("%m"),
+            "day" : self.date.strftime("%d")
+        }
+        # a variável date vai receber um valor em algum momento. com isso 
+        # quando a classe Config for inicializada, nós criamos a variável dt onde essa 
+        # é um dict com o s campos de year, month e day extraídos da variável date que foi 
+        # carregada antes __post_init__
+        # Ao criar Config, o valor informado é guardado em self.date.
+        # Depois disso, __post_init__ é chamado automaticamente.
+        # Aqui montamos self.dt, um dicionário com o ano, o mês e o dia
+        # extraídos de self.date.
+        source_tail = self._source_partition_suffix()
+        self.source_path = self.source_path.rstrip("/") + "/" + source_tail
+
+    def _source_partition_suffix(self):
+        return f"{self.dt["year"]}/{self.dt["month"]}/{self.dt["day"]}/"
+        # nesse caso estamos lidando com um bucket onde a partição dele não é em hive 
+    def _target_partition_suffix(self):
+        return f"year={self.dt["year"]}/month={self.dt["month"]}/day={self.dt["day"]}/"
+        # aqui os dados vão ser descarregados em hive format 
+    
+             
