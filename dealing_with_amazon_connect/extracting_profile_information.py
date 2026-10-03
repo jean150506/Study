@@ -184,3 +184,146 @@ class Config:
         # delimitador, o delimitador e o que está depois do delimitador.
         return bucket_name, prefix.rstrip("/")
         # aqui usamos o rstrip para caso o bucket tiver várias subpastas, o prefix vai pegar a / mais a direita 
+
+    def log_config(self) -> None:
+        logging.info("=" * 70)
+        logging.info("[CONFIG] configuraçoes carregadas")
+        logging.info("=" * 70)
+
+    @staticmethod
+    def discover_customer_profile_domain(region: str) -> List[Dict[str, Any]]:
+        # Aqui faremos uma requisição à api da aws ( boto3 ) para pegarmos o nome do domínio que estão as info de 
+        # profiles. Como resposta, essa api fornece uma lista de dicionário de chaves str e valores diversos 
+        logging.info("=" * 70)
+        logging.info("[DISCOVER] procurando por domínios")
+        logging.info("=" * 70)
+
+        start_time = time.time() # aqui vamos contar o tempo de processamento
+        client = boto3.client("customer-profiles", region_name = region, verify=False, config=BOTO_CONFIG)
+        logging.info("[CLIENT] iniciado o client de customer-profiles")
+
+        all_domains: List[Dict[str, Any]] = []
+        next_token = None
+        page_count = 0 
+
+        while True:
+            page_count += 1
+            params: Dict[str, Any] = {"MaxResults": 100}
+            if next_token:
+                params["NextToken"] = next_token
+
+            try:
+                logging.info (f"[DISCOVERY] requisitando página {page_count}...")
+                response = client.list_domains(**params)
+                logging.info("[DISCOVERY] domain encontrado")
+                # os argumentos de list_domains são "NextToken" e "MaxResults". usando o **params 
+                # descompactamos o dicionário params como argumentos que preenchem o list domain.
+                # ou seja, se params está assim: params={"MaxResults":100, "NextToken": 1}
+                # depois do ** params é como se virasse MaxResults=100, NextToken=1
+                # Sendo assim, dentro do list domains ficaria:
+                # client.list_domains(MaxResults=100, NextToken=1)
+                # como aqui não tivemos que especificar Region ou qualquer identificador único da nossa conta aws,
+                # imagino que isso aqui só funcione se você estiver com as variáveis de ambiente da aws configuradas no seu pc 
+                # ou se você rodar isso dentro do teu ambiente aws 
+            except ClientError as e: # não sei pra que serve esse ClientError. Acho que é uma lib específica pra relatar
+                # problema de conexão com cliente aws
+                logging.error("[DISCOVERY] erro ao listar os domínios: {e}")
+                raise 
+                # keyword raises an exception and immediately stops the normal execution of the program.
+
+            items = response.get("Items", [])
+            all_domains.extend(items)
+            # all_domains.extend(items) adiciona à lista todos os itens completos retornados 
+            # em Items. É equivalente a: for item in items: all_domains.append(item)
+            #Ou seja, a resposta que o list_domain dá é a seguinte:
+            """
+            {
+                'Items': [
+                    {
+                        'DomainName': 'string',
+                        'CreatedAt': datetime(2015, 1, 1),
+                        'LastUpdatedAt': datetime(2015, 1, 1),
+                        'Tags': {
+                            'string': 'string'
+                        }
+                    },
+                ],
+                'NextToken': 'string'
+            }
+
+            com o all_domains.extend(items) pegamos uma lista que está criada já, nesse caso a list_domains é uma lista vazia
+            com isso, pegamos cada um dos itens retornados pela API e adicionamos à lista no seguinte formato:
+            all_domains=[
+                {"DomainName1":"nome do dominio", "createdAt": data de criação do domínio,"LastUpdate":data, "Tags":se tiver},
+                {"DomainName2":"nome do dominio", "createdAt": data de criação do domínio,"LastUpdate":data, "Tags":se tiver}
+                ]
+            Lógicamente, o segundo domain só é adicionado depois da execução completa do bloco. Digo isso porque a chave NextToken
+            do primeiro domínio entra depois de registrar os items do primeiro domínio no list_domains
+            """
+            next_token = response.get("NextToken")
+            if not next_token:
+                logging.info("[DISCOVERY] ultima pagina processada")
+                break
+            """
+            Resumo de como esse loop While funciona:
+            depois do client de customer-profiles ser criado e das variáveis all_domains( lista de dicionários ), next_token e page_count serem declaradas
+            aí entramos no loop while
+            aqui, verificamos se já tem um valor de NextToken. Na primeira execução o NextToken é None, então não entramos nesse if 
+            a partir daí entramos no try. Aqui chamos a api de list_domains e descompactamos o dicionário params que definimos lá encima
+            fazemos isso porque a funçãi list_domain precisa dos argumentos de Número máximo de registros e NextToken.
+            Se tivermos sucesso nesse try caímos para fora desse esquema de tentativa e excessão e vamos para o items. no Items nós fazemos 
+            uma requisição ( metodo get) para a resposta que o list domain nos deu. A estrutura de resposta dele é uma dicionário de listas e esse
+            dicionário tem duas chaves principais: Items e NextToken.  na linha items=response.get("Items",[]) nós pegamos tudo que estiver
+            dentro da chave Items. Se ela não estiver ali é retornada uma lista vazia. Depois disso, adicionamos à lista all_domains todas as chaves presentes dentro de Items 
+            porque a chave Items de reposta da função list_domains tem como valor{"key":"value"} uma lista de dicionários.
+            dessa forma, a lista all_domains, pelo metodo extend, passa ter o dict dentro daquela key Items que estamos rodando.
+            depois de fazer essa atribuição à all_domains, vamos para o next_token. Aqui verificamos, através do metodo get se há uma key
+            dentro da resposta do list_domains chamada "NextToke". Se tiver, nós sobrescrevemos aquele None com o novo valor de next_token.
+            aí recomeçamos o loop. Porém, agora quando chegarmos na parte "if next_toke: params["NextToken"] = next_token ", aqui o next_token não 
+            é mais None. Agora ele possui um valor. Com ele tendo um valor, digamos que o valor seja 2, quando entramos no "try" novamente, o response vai ser diferente.
+            Antes o response seria o seguinte:
+            response = client.list_domains(MaxResults=100, NextToken=None)
+            agora o response é :
+            response = client.list_domains(MaxResults=100, NextToken=2)
+            Isso quer dizer que vai ser varrida uma nova página, não a mesma que já foi.
+            """
+
+        elapsed = time.time() - start_time
+        logging.info(f"tempo de execução: {elapsed}")
+        for i, domain in enumerate(all_domains,1):
+            # Aqui retornamos  o núemero do registro ( i ) e o registro( domain )
+            # para cada posição ( i ) e dominio dentro de all_domains
+            logging.info(f"{i}. {domain.get("DomainName", "N/A")}")
+
+        return all_domains
+
+class ConnectContactsProfileExtractor:
+    def __init__(self, connect_instance_id: str, profiles_domain_name, region:str = "<REGION>", max_profiles: int= 0):
+        logging.info("[EXTRACTOR] inicializando extrator ")
+        self.connect_instance_id = connect_instance_id
+        self.instance_short_id = connect_instance_id.split("/")[-1]
+        self.profiles_domain_name = profiles_domain_name
+        self.region = region
+        self.max_profiles = max_profiles
+
+        logging.info("=" * 70)
+        logging.info("inicializando o cliente connect")
+        self.connect_client = boto3.client("connect", region_name=region, verify=False, config=BOTO_CONFIG)
+        logging.info("=" * 70 )
+        logging.info("inicializando o cliente customer-profiles")
+        self.profile_client = boto3.client("customer-profiles", region_name = region, verify=False, config=BOTO_CONFIG)
+        logging.info("=" * 70 )
+
+        self._processed_contacts: Set[str] = set()
+        # metodo set cria uma lista de elementos únicos
+        self._processed_profiles_ids: Set[str]=set()
+        self._found_profiles: List[Dict[str, Any]]=[]
+
+        # Esse bloco de código acho que não tem muito o que falar. Lembro de ter visto em algum lugar que função __init__
+        # ela pré carrega dados que vamos usar. nesse caso, pre carregamos os clientes connect e profile
+    def _limit_reached(self) -> bool:
+        if self.max_profiles <= 0 :
+            return False 
+        return len (self._found_profiles) >= self.max_profiles
+    
+
