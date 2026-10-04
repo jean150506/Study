@@ -325,5 +325,338 @@ class ConnectContactsProfileExtractor:
         if self.max_profiles <= 0 :
             return False 
         return len (self._found_profiles) >= self.max_profiles
+
+    def search_all_contacts(self, start_date: date, end_date: date) -> List[Dict[str, Any]]:
+        logging.info("[EXTRACTOR][CONTACTS] iniciando a busca de contatos")
+
+        start_time_exec = time.time()
+        start_time = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=UTC)
+        # Essa linha pega o objeto start_date, que é um objeto do tipo date, e transforma em datetime
+        # Acho que o min.time() nesse contexto não estamos falando de minuto e sim de mínimo. Imagino que seja feito 
+        # isso para termos um retorno do tipo yyyy-mm-dd 00:00:00 ( menor tempo possível )
+        """
+        Sobre o datetime.combine(...):
+        O datetime.combine() pega uma data isolada (ex: 2026-06-06) e "cola" um horário nela 
+        (o 00:00:00 que o min.time() gerou), transformando um objeto date em um objeto datetime completo 
+        (2026-06-06 00:00:00).
+        """
+        end_time = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).replace(tzinfo=UTC)
+
+        all_contacts: List[Dict[str, Any]] = []
+        next_token = None
+        page = 1
+
+        while True:
+            params : Dict[str, Any ] = {
+                "InstanceId": self.instance_short_id,
+                "TimeRange": {
+                    "Type": "INITIATION_TIMESTAMP",
+                    "StartTime": start_time, # Aquela conversão de start_time é necessária provavelmente pelo formato de resposta da api
+                    "EndTime": end_time,
+                },
+                "MaxResults": 100,
+                # aqui nesse bloco declaramos um dicionário com os campos que, provavelmente, a api necessita
+            }
+            if next_token:
+                params["NextToken"] = next_token
+
+            try:
+                logging.info("=" * 70)
+                logging.info("[EXTRACTOR][CONTACTS] requisitando pagina ")
+                response = self.connect_client.search_contacts(**params)
+                # Aqui descompactamos o dicionario params para passar os argumentos de start_time, end_time, type etc
+                """
+                Estrutura de requisição da api client.search_contacts()
+
+
+                response = client.search_contacts(
+    InstanceId='string',
+    TimeRange={
+        'Type': 'INITIATION_TIMESTAMP'|'SCHEDULED_TIMESTAMP'|'CONNECTED_TO_AGENT_TIMESTAMP'|'DISCONNECT_TIMESTAMP'|'ENQUEUE_TIMESTAMP',
+        'StartTime': datetime(2015, 1, 1),
+        'EndTime': datetime(2015, 1, 1)
+    },
+    SearchCriteria={
+        'Name': {
+            'SearchText': [
+                'string',
+            ],
+            'MatchType': 'MATCH_ALL'|'MATCH_ANY'|'MATCH_EXACT'|'MATCH_NONE'
+        },
+        'AgentIds': [
+            'string',
+        ],
+        'AgentHierarchyGroups': {
+            'L1Ids': [
+                'string',
+            ],
+            'L2Ids': [
+                'string',
+            ],
+            'L3Ids': [
+                'string',
+            ],
+            'L4Ids': [
+                'string',
+            ],
+            'L5Ids': [
+                'string',
+            ]
+        },
+        'Channels': [
+            'VOICE'|'CHAT'|'TASK'|'EMAIL',
+        ],
+        'ContactAnalysis': {
+            'Transcript': {
+                'Criteria': [
+                    {
+                        'ParticipantRole': 'AGENT'|'CUSTOMER'|'SYSTEM'|'CUSTOM_BOT'|'SUPERVISOR',
+                        'SearchText': [
+                            'string',
+                        ],
+                        'MatchType': 'MATCH_ALL'|'MATCH_ANY'|'MATCH_EXACT'|'MATCH_NONE'
+                    },
+                ],
+                'MatchType': 'MATCH_ALL'|'MATCH_ANY'|'MATCH_EXACT'|'MATCH_NONE'
+            }
+        },
+        'InitiationMethods': [
+            'INBOUND'|'OUTBOUND'|'TRANSFER'|'QUEUE_TRANSFER'|'CALLBACK'|'API'|'DISCONNECT'|'MONITOR'|'EXTERNAL_OUTBOUND'|'WEBRTC_API'|'AGENT_REPLY'|'FLOW',
+        ],
+        'QueueIds': [
+            'string',
+        ],
+        'RoutingCriteria': {
+            'Steps': [
+                {
+                    'AgentCriteria': {
+                        'AgentIds': [
+                            'string',
+                        ],
+                        'MatchType': 'MATCH_ALL'|'MATCH_ANY'|'MATCH_EXACT'|'MATCH_NONE'
+                    }
+                },
+            ]
+        },
+        'AdditionalTimeRange': {
+            'Criteria': [
+                {
+                    'TimeRange': {
+                        'Type': 'INITIATION_TIMESTAMP'|'SCHEDULED_TIMESTAMP'|'CONNECTED_TO_AGENT_TIMESTAMP'|'DISCONNECT_TIMESTAMP'|'ENQUEUE_TIMESTAMP',
+                        'StartTime': datetime(2015, 1, 1),
+                        'EndTime': datetime(2015, 1, 1)
+                    },
+                    'TimestampCondition': {
+                        'Type': 'INITIATION_TIMESTAMP'|'SCHEDULED_TIMESTAMP'|'CONNECTED_TO_AGENT_TIMESTAMP'|'DISCONNECT_TIMESTAMP'|'ENQUEUE_TIMESTAMP',
+                        'ConditionType': 'NOT_EXISTS'
+                    }
+                },
+            ],
+            'MatchType': 'MATCH_ALL'|'MATCH_ANY'|'MATCH_EXACT'|'MATCH_NONE'
+        },
+        'SearchableContactAttributes': {
+            'Criteria': [
+                {
+                    'Key': 'string',
+                    'Values': [
+                        'string',
+                    ]
+                },
+            ],
+            'MatchType': 'MATCH_ALL'|'MATCH_ANY'|'MATCH_EXACT'|'MATCH_NONE'
+        },
+        'SearchableSegmentAttributes': {
+            'Criteria': [
+                {
+                    'Key': 'string',
+                    'Values': [
+                        'string',
+                    ]
+                },
+            ],
+            'MatchType': 'MATCH_ALL'|'MATCH_ANY'|'MATCH_EXACT'|'MATCH_NONE'
+        },
+        'ActiveRegions': [
+            'string',
+        ],
+        'ContactTags': {
+            'OrConditions': [
+                [
+                    {
+                        'TagKey': 'string',
+                        'TagValue': 'string'
+                    },
+                ],
+            ],
+            'AndConditions': [
+                {
+                    'TagKey': 'string',
+                    'TagValue': 'string'
+                },
+            ],
+            'TagCondition': {
+                'TagKey': 'string',
+                'TagValue': 'string'
+            }
+        },
+        'AiAgents': {
+            'Criteria': [
+                {
+                    'Id': 'string',
+                    'VersionNumber': 123,
+                    'AiAgentEscalated': True|False,
+                    'AiUseCase': 'AgentAssistance'|'SelfService'
+                },
+            ]
+        }
+    },
+    MaxResults=123,
+    NextToken='string',
+    Sort={
+        'FieldName': 'INITIATION_TIMESTAMP'|'SCHEDULED_TIMESTAMP'|'CONNECTED_TO_AGENT_TIMESTAMP'|'DISCONNECT_TIMESTAMP'|'INITIATION_METHOD'|'CHANNEL'|'EXPIRY_TIMESTAMP',
+        'Order': 'ASCENDING'|'DESCENDING'
+    }
+)
+                """
+
+            except ClientError as e:
+                error_msg =  e.response.get("Error", {}).get("Message", str(e))
+                raise 
+
+            contacts = response.get("Contacts", [])
+            """
+            Estrutura de resposta da API:
+
+            {
+                'Contacts': [
+                    {
+                        'Arn': 'string',
+                        'Id': 'string',
+                        'InitialContactId': 'string',
+                        'PreviousContactId': 'string',
+                        'InitiationMethod': 'INBOUND'|'OUTBOUND'|'TRANSFER'|'QUEUE_TRANSFER'|'CALLBACK'|'API'|'DISCONNECT'|'MONITOR'|'EXTERNAL_OUTBOUND'|'WEBRTC_API'|'AGENT_REPLY'|'FLOW',
+                        'Channel': 'VOICE'|'CHAT'|'TASK'|'EMAIL',
+                        'QueueInfo': {
+                            'Id': 'string',
+                            'EnqueueTimestamp': datetime(2015, 1, 1)
+                        },
+                        'AgentInfo': {
+                            'Id': 'string',
+                            'ConnectedToAgentTimestamp': datetime(2015, 1, 1)
+                        },
+                        'InitiationTimestamp': datetime(2015, 1, 1),
+                        'DisconnectTimestamp': datetime(2015, 1, 1),
+                        'ScheduledTimestamp': datetime(2015, 1, 1),
+                        'SegmentAttributes': {
+                            'string': {
+                                'ValueString': 'string',
+                                'ValueMap': {
+                                    'string': {
+                                        'ValueString': 'string',
+                                        'ValueMap': {'... recursive ...'},
+                                        'ValueInteger': 123,
+                                        'ValueList': [
+                                            {'... recursive ...'},
+                                        ],
+                                        'ValueArn': 'string'
+                                    }
+                                }
+                            }
+                        },
+                        'Name': 'string',
+                        'RoutingCriteria': {
+                            'Steps': [
+                                {
+                                    'Expiry': {
+                                        'DurationInSeconds': 123,
+                                        'ExpiryTimestamp': datetime(2015, 1, 1)
+                                    },
+                                    'Expression': {
+                                        'AttributeCondition': {
+                                            'Name': 'string',
+                                            'Value': 'string',
+                                            'ProficiencyLevel': ...,
+                                            'Range': {
+                                                'MinProficiencyLevel': ...,
+                                                'MaxProficiencyLevel': ...
+                                            },
+                                            'MatchCriteria': {
+                                                'AgentsCriteria': {
+                                                    'AgentIds': [
+                                                        'string',
+                                                    ]
+                                                }
+                                            },
+                                            'ComparisonOperator': 'string'
+                                        },
+                                        'AndExpression': [
+                                            {'... recursive ...'},
+                                        ],
+                                        'OrExpression': [
+                                            {'... recursive ...'},
+                                        ],
+                                        'NotAttributeCondition': {
+                                            'Name': 'string',
+                                            'Value': 'string',
+                                            'ProficiencyLevel': ...,
+                                            'Range': {
+                                                'MinProficiencyLevel': ...,
+                                                'MaxProficiencyLevel': ...
+                                            },
+                                            'MatchCriteria': {
+                                                'AgentsCriteria': {
+                                                    'AgentIds': [
+                                                        'string',
+                                                    ]
+                                                }
+                                            },
+                                            'ComparisonOperator': 'string'
+                                        }
+                                    },
+                                    'Status': 'ACTIVE'|'INACTIVE'|'JOINED'|'EXPIRED'
+                                },
+                            ],
+                            'ActivationTimestamp': datetime(2015, 1, 1),
+                            'Index': 123
+                        },
+                        'Tags': {
+                            'string': 'string'
+                        },
+                        'GlobalResiliencyMetadata': {
+                            'ActiveRegion': 'string',
+                            'OriginRegion': 'string',
+                            'TrafficDistributionGroupId': 'string'
+                        },
+                        'AiAgentInfo': [
+                            {
+                                'AiAgentVersionId': 'string',
+                                'AiAgentEscalated': True|False,
+                                'AiUseCase': 'AgentAssistance'|'SelfService'
+                            },
+                        ]
+                    },
+                ],
+                'NextToken': 'string',
+                'TotalCount': 123
+            }
+            """
+            all_contacts.extend(contacts)
+
+            logging.info(
+                f"[EXTRACTOR][CONTACTS] Pagina lida {page}"
+                f"/ total de contatos: {len(all_contacts)}" 
+            )
+
+            next_token = response.get("NextToken")
+            if not next_token:
+                logging.info("Sem Mais páginas")
+                break
+            page +=1 
+            if page > 1000:
+                logging.warning(f"[EXTRACTOR][CONTACTS] Limite de paginas atingido.")
+
+        elapse = time.time() - start_time_exec
+        return all_contacts
+
     
 
